@@ -5,6 +5,7 @@ members = [
     "crates/unitree-msgs",
     "crates/unitree-dds",
     "crates/unitree-go2",
+    "crates/unitree-rpc",
 ]
 
 [workspace.package]

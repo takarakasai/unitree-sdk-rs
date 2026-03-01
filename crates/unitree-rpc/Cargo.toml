@@ -1,0 +1,15 @@
+[package]
+name = "unitree-rpc"
+description = "Unitree request/response RPC client over DDS (motion_switcher etc.)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+cyclonedds-sys = { path = "../cyclonedds-sys", version = "0.1.0" }
+thiserror.workspace = true
+
+[build-dependencies]
+cc = "1"
