@@ -7,6 +7,7 @@ unitree_sdk2 (C++) を参照しつつ、**Unitree Go2 の低レベル制御 (rt/
 - [design.md](design.md) — 設計書: アーキテクチャ・型・ワイヤ仕様・API 設計
 - [plan.md](plan.md) — 計画書: マイルストーン・リスク・検証戦略
 - [kickoff.md](kickoff.md) — 別セッションで実装に着手する人向けの手順とコピペコマンド
+- [go2-bringup.md](go2-bringup.md) — 実機 Go2 での伏せ⇄立ち動作確認手順（安全ラダー・コピペコマンド）
 
 ## TL;DR
 
