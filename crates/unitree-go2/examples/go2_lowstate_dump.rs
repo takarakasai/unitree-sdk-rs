@@ -84,10 +84,7 @@ fn run(iface: &str, secs: u64) -> unitree_go2::Result<()> {
 fn emit_row(start: Instant, s: &LowState) {
     let t = start.elapsed().as_secs_f64();
     let q = s.imu_state.quaternion;
-    print!(
-        "{t:.4},{},{},{},{},{}",
-        s.tick, q[0], q[1], q[2], q[3]
-    );
+    print!("{t:.4},{},{},{},{},{}", s.tick, q[0], q[1], q[2], q[3]);
     for i in 0..joint::NUM_LEG_JOINTS {
         print!(",{}", s.motor_state[i].q);
     }

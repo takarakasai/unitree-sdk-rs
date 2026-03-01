@@ -11,11 +11,8 @@ const DDS_DOMAIN_DEFAULT: dds::dds_domainid_t = 0xFFFF_FFFF;
 #[test]
 fn create_and_delete_participant() {
     unsafe {
-        let participant = dds::dds_create_participant(
-            DDS_DOMAIN_DEFAULT,
-            std::ptr::null(),
-            std::ptr::null(),
-        );
+        let participant =
+            dds::dds_create_participant(DDS_DOMAIN_DEFAULT, std::ptr::null(), std::ptr::null());
         assert!(
             participant > 0,
             "dds_create_participant returned non-positive handle {participant} \
@@ -23,6 +20,10 @@ fn create_and_delete_participant() {
         );
 
         let rc = dds::dds_delete(participant);
-        assert_eq!(rc, dds::DDS_RETCODE_OK as dds::dds_return_t, "dds_delete failed");
+        assert_eq!(
+            rc,
+            dds::DDS_RETCODE_OK as dds::dds_return_t,
+            "dds_delete failed"
+        );
     }
 }

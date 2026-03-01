@@ -24,8 +24,14 @@ macro_rules! check_all {
 fn unitree_api_all() {
     use unitree_msgs::unitree_api::*;
     check_all!(
-        Request, RequestHeader, RequestIdentity, RequestLease, RequestPolicy, Response,
-        ResponseHeader, ResponseStatus,
+        Request,
+        RequestHeader,
+        RequestIdentity,
+        RequestLease,
+        RequestPolicy,
+        Response,
+        ResponseHeader,
+        ResponseStatus,
     );
 }
 
@@ -33,10 +39,30 @@ fn unitree_api_all() {
 fn unitree_go_all() {
     use unitree_msgs::unitree_go::*;
     check_all!(
-        AudioData, BmsCmd, BmsState, Error, Go2FrontVideoData, HeightMap, IMUState,
-        InterfaceConfig, LidarState, LowCmd, LowState, MotorCmd, MotorCmds, MotorState,
-        MotorStates, PathPoint, Req, Res, SportModeCmd, SportModeState, TimeSpec, UwbState,
-        UwbSwitch, WirelessController,
+        AudioData,
+        BmsCmd,
+        BmsState,
+        Error,
+        Go2FrontVideoData,
+        HeightMap,
+        IMUState,
+        InterfaceConfig,
+        LidarState,
+        LowCmd,
+        LowState,
+        MotorCmd,
+        MotorCmds,
+        MotorState,
+        MotorStates,
+        PathPoint,
+        Req,
+        Res,
+        SportModeCmd,
+        SportModeState,
+        TimeSpec,
+        UwbState,
+        UwbSwitch,
+        WirelessController,
     );
 }
 
@@ -44,7 +70,16 @@ fn unitree_go_all() {
 fn unitree_hg_all() {
     use unitree_msgs::unitree_hg::*;
     check_all!(
-        BmsCmd, BmsState, HandCmd, HandState, IMUState, LowCmd, LowState, MainBoardState,
-        MotorCmd, MotorState, PressSensorState,
+        BmsCmd,
+        BmsState,
+        HandCmd,
+        HandState,
+        IMUState,
+        LowCmd,
+        LowState,
+        MainBoardState,
+        MotorCmd,
+        MotorState,
+        PressSensorState,
     );
 }

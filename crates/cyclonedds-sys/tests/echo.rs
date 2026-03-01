@@ -28,8 +28,7 @@ extern "C" {
 #[test]
 fn same_process_echo() {
     unsafe {
-        let participant =
-            dds::dds_create_participant(DDS_DOMAIN_DEFAULT, ptr::null(), ptr::null());
+        let participant = dds::dds_create_participant(DDS_DOMAIN_DEFAULT, ptr::null(), ptr::null());
         assert!(participant > 0, "create_participant failed: {participant}");
 
         let topic_name = CString::new("cyclonedds_sys_EchoTopic").unwrap();
@@ -67,13 +66,7 @@ fn same_process_echo() {
         let deadline = Instant::now() + Duration::from_secs(5);
         let mut got = None;
         while Instant::now() < deadline {
-            let n = dds::dds_take(
-                reader,
-                samples.as_mut_ptr(),
-                infos.as_mut_ptr(),
-                1,
-                1,
-            );
+            let n = dds::dds_take(reader, samples.as_mut_ptr(), infos.as_mut_ptr(), 1, 1);
             assert!(n >= 0, "dds_take error: {n}");
             if n > 0 && infos[0].valid_data {
                 let echo = &*samples[0].cast::<Echo>();

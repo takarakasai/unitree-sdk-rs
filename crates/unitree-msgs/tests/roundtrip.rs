@@ -7,7 +7,11 @@ use unitree_msgs::{CdrSerialize, DdsType};
 /// Helper: assert a value round-trips through a full CDR payload.
 fn assert_roundtrip<T: DdsType + PartialEq + std::fmt::Debug>(v: &T) {
     let payload = v.to_cdr();
-    assert_eq!(&payload[..4], &[0x00, 0x07, 0x00, 0x00], "encapsulation header");
+    assert_eq!(
+        &payload[..4],
+        &[0x00, 0x07, 0x00, 0x00],
+        "encapsulation header"
+    );
     let back = T::from_cdr(&payload).expect("decode");
     assert_eq!(&back, v, "round-trip mismatch");
 }
@@ -108,7 +112,11 @@ fn bad_header_errors() {
 #[test]
 fn body_level_roundtrip() {
     let mut s = CdrSerializer::new();
-    let m = MotorCmd { mode: 7, q: 1.0, ..Default::default() };
+    let m = MotorCmd {
+        mode: 7,
+        q: 1.0,
+        ..Default::default()
+    };
     m.serialize(&mut s);
     let body = s.into_body();
     let mut d = CdrDeserializer::new(&body);

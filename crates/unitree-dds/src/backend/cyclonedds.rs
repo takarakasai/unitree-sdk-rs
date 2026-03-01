@@ -142,9 +142,7 @@ impl DdsBackend for CycloneBackend {
     fn take<T: crate::Message>(reader: &Self::Reader) -> Result<Option<T>> {
         let mut samples: [*mut c_void; 1] = [ptr::null_mut()];
         let mut infos: [dds::dds_sample_info_t; 1] = unsafe { std::mem::zeroed() };
-        let n = unsafe {
-            dds::dds_take(*reader, samples.as_mut_ptr(), infos.as_mut_ptr(), 1, 1)
-        };
+        let n = unsafe { dds::dds_take(*reader, samples.as_mut_ptr(), infos.as_mut_ptr(), 1, 1) };
         check(n, "dds_take")?;
         if n > 0 && infos[0].valid_data {
             // POD sample: copy it out by value (T: Copy, no owned pointers).

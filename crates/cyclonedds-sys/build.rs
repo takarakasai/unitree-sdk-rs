@@ -143,7 +143,10 @@ fn ensure_libclang() {
             })
             .unwrap_or(false);
         if has_libclang {
-            println!("cargo:warning=cyclonedds-sys: using libclang from {}", dir.display());
+            println!(
+                "cargo:warning=cyclonedds-sys: using libclang from {}",
+                dir.display()
+            );
             std::env::set_var("LIBCLANG_PATH", &dir);
             return;
         }

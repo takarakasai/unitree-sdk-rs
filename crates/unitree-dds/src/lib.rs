@@ -86,11 +86,7 @@ impl Participant {
     }
 
     /// Create a writer on `topic`.
-    pub fn create_writer<T: Message>(
-        &self,
-        topic: &Topic<T>,
-        qos: WriterQos,
-    ) -> Result<Writer<T>> {
+    pub fn create_writer<T: Message>(&self, topic: &Topic<T>, qos: WriterQos) -> Result<Writer<T>> {
         Ok(Writer {
             inner: ActiveBackend::create_writer(&self.inner, &topic.inner, &qos)?,
             _t: PhantomData,
@@ -98,11 +94,7 @@ impl Participant {
     }
 
     /// Create a reader on `topic`.
-    pub fn create_reader<T: Message>(
-        &self,
-        topic: &Topic<T>,
-        qos: ReaderQos,
-    ) -> Result<Reader<T>> {
+    pub fn create_reader<T: Message>(&self, topic: &Topic<T>, qos: ReaderQos) -> Result<Reader<T>> {
         Ok(Reader {
             inner: ActiveBackend::create_reader(&self.inner, &topic.inner, &qos)?,
             _t: PhantomData,
