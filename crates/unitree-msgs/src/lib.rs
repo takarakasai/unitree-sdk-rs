@@ -32,5 +32,26 @@ pub trait DdsType: CdrSerialize + CdrDeserialize + Default + Clone {
     }
 }
 
+/// A "plain old data" DDS type: one that contains only scalars, fixed-size
+/// arrays, and references to other [`DdsPod`] types — no `string` and no
+/// variable-length sequence.
+///
+/// Such a type is generated as `#[repr(C)]` with a memory layout matching the
+/// C struct that idlc emits for the same `.msg`, so the Cyclone DDS backend can
+/// pass `&Self` directly to `dds_write` and receive into `Self` via `dds_take`
+/// with no conversion. [`DESCRIPTOR_SYMBOL`](DdsPod::DESCRIPTOR_SYMBOL) names
+/// the `extern` C topic descriptor (committed under `unitree-dds`).
+///
+/// # Safety / layout contract
+/// The `#[repr(C)]` field order and types must match the idlc-generated C
+/// struct field-for-field. The committed descriptors are regenerated from the
+/// same `.msg` via `.idl`, so this holds by construction; the loopback tests in
+/// `unitree-dds` guard it at runtime.
+pub trait DdsPod: DdsType + Copy {
+    /// Name of the `extern` C `dds_topic_descriptor_t` symbol emitted by idlc,
+    /// e.g. `unitree_go_msg_dds__LowState__desc`.
+    const DESCRIPTOR_SYMBOL: &'static str;
+}
+
 // Generated message modules (`unitree_api`, `unitree_go`, `unitree_hg`).
 include!(concat!(env!("OUT_DIR"), "/generated.rs"));
