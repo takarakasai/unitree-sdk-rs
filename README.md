@@ -25,8 +25,13 @@ cargo check --workspace
 ### Prerequisites
 
 - Rust 1.75+ (toolchain pinned via `rust-version` in `Cargo.toml`)
-- `clang`, `cmake`, `build-essential`, `pkg-config` (needed from M1 for bindgen
-  and DDS linking)
+- A C compiler (`gcc`/`g++`) plus `cmake`, `build-essential`, `pkg-config` for
+  compiling the committed topic descriptors and linking `libddsc`.
+- `clang`/`libclang` is **not** required for normal builds: the Cyclone DDS FFI
+  bindings are committed (`crates/cyclonedds-sys/bindings/<arch>.rs`). It is
+  only needed to *regenerate* them — build `cyclonedds-sys` with
+  `--features buildtime-bindgen`, or run `tools/regen-bindings.sh` (maintainer
+  task, after bumping the vendored headers).
 
 ### Vendored Cyclone DDS
 

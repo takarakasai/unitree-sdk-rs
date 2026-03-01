@@ -1,8 +1,16 @@
 //! Build script for `cyclonedds-sys`.
 //!
-//! Resolves the Cyclone DDS headers and `libddsc` shared library, generates
-//! FFI bindings with bindgen, and configures linking so both `cargo build` and
-//! test execution find the library at runtime.
+//! Resolves the Cyclone DDS headers and `libddsc` shared library, provides the
+//! FFI bindings, and configures linking so both `cargo build` and test
+//! execution find the library at runtime.
+//!
+//! # Bindings: committed by default, no clang needed
+//! Normal builds copy the committed `bindings/<arch>.rs` into `OUT_DIR` — they
+//! need only a C compiler (gcc/g++), never clang/libclang. Bindgen runs only
+//! under the maintainer-only `buildtime-bindgen` feature, which regenerates the
+//! bindings from the vendored headers (and needs libclang). See
+//! `tools/regen-bindings.sh`. This mirrors how the topic descriptors are
+//! handled: committed generated artifacts, regenerated on demand.
 //!
 //! Library/header resolution order:
 //! 1. `CYCLONEDDS_HOME` — a Cyclone DDS install with `include/` and `lib/`.
@@ -29,8 +37,6 @@ fn main() {
     println!("cargo:rerun-if-env-changed=UNITREE_SDK2_ROOT");
     println!("cargo:rerun-if-changed=wrapper.h");
 
-    ensure_libclang();
-
     let (include_dir, lib_dir) = resolve_dirs(&workspace_root, &arch);
 
     let header = include_dir.join("dds/dds.h");
@@ -40,24 +46,8 @@ fn main() {
         header.display()
     );
 
-    // --- bindgen ---
-    let bindings = bindgen::Builder::default()
-        .header("wrapper.h")
-        .clang_arg(format!("-I{}", include_dir.display()))
-        // Restrict to the DDS C surface to keep bindings small and stable.
-        .allowlist_function("dds_.*")
-        .allowlist_type("dds_.*")
-        .allowlist_type("DDS_.*")
-        .allowlist_var("DDS_.*")
-        .allowlist_var("dds_.*")
-        .default_enum_style(bindgen::EnumVariation::ModuleConsts)
-        .derive_default(true)
-        .layout_tests(false)
-        .generate()
-        .expect("bindgen failed to generate Cyclone DDS bindings");
-    bindings
-        .write_to_file(out_dir.join("bindings.rs"))
-        .expect("write bindings.rs");
+    // --- bindings: regenerate with bindgen (maintainer) or use committed ---
+    provide_bindings(&manifest_dir, &include_dir, &arch, &out_dir);
 
     // --- stage the shared library with its SONAME so runtime load works ---
     let src_so = lib_dir.join("libddsc.so");
@@ -99,9 +89,69 @@ fn main() {
     println!("cargo:include_dir={}", include_dir.display());
 }
 
+/// Provide `OUT_DIR/bindings.rs`, either by regenerating with bindgen (the
+/// maintainer-only `buildtime-bindgen` feature) or by copying the committed
+/// `bindings/<arch>.rs`. The committed path needs no clang.
+fn provide_bindings(manifest_dir: &Path, include_dir: &Path, arch: &str, out_dir: &Path) {
+    let committed = manifest_dir.join("bindings").join(format!("{arch}.rs"));
+    let out = out_dir.join("bindings.rs");
+
+    #[cfg(feature = "buildtime-bindgen")]
+    {
+        // Regenerate from the vendored headers and refresh the committed copy
+        // so the change can be reviewed and committed. Needs libclang.
+        regen_with_bindgen(include_dir, &out);
+        if let Err(e) = std::fs::copy(&out, &committed) {
+            println!(
+                "cargo:warning=cyclonedds-sys: could not refresh {}: {e}",
+                committed.display()
+            );
+        }
+        println!("cargo:rerun-if-changed=bindings/{arch}.rs");
+        return;
+    }
+
+    #[cfg(not(feature = "buildtime-bindgen"))]
+    {
+        let _ = include_dir;
+        println!("cargo:rerun-if-changed=bindings/{arch}.rs");
+        assert!(
+            committed.exists(),
+            "no committed bindings for target arch {arch:?} at {} — build cyclonedds-sys \
+             with `--features buildtime-bindgen` (needs libclang) to generate them, \
+             or run tools/regen-bindings.sh on an {arch} host",
+            committed.display()
+        );
+        std::fs::copy(&committed, &out)
+            .unwrap_or_else(|e| panic!("copy {} -> bindings.rs: {e}", committed.display()));
+    }
+}
+
+/// Regenerate the FFI bindings with bindgen (requires libclang).
+#[cfg(feature = "buildtime-bindgen")]
+fn regen_with_bindgen(include_dir: &Path, out: &Path) {
+    ensure_libclang();
+    let bindings = bindgen::Builder::default()
+        .header("wrapper.h")
+        .clang_arg(format!("-I{}", include_dir.display()))
+        // Restrict to the DDS C surface to keep bindings small and stable.
+        .allowlist_function("dds_.*")
+        .allowlist_type("dds_.*")
+        .allowlist_type("DDS_.*")
+        .allowlist_var("DDS_.*")
+        .allowlist_var("dds_.*")
+        .default_enum_style(bindgen::EnumVariation::ModuleConsts)
+        .derive_default(true)
+        .layout_tests(false)
+        .generate()
+        .expect("bindgen failed to generate Cyclone DDS bindings");
+    bindings.write_to_file(out).expect("write bindings.rs");
+}
+
 /// Ensure bindgen can locate libclang. If `LIBCLANG_PATH` is unset, probe the
 /// common Debian/Ubuntu llvm install dirs (apt installs `libclang-NN.so.NN`,
 /// which older clang-sys does not always find on its own).
+#[cfg(feature = "buildtime-bindgen")]
 fn ensure_libclang() {
     println!("cargo:rerun-if-env-changed=LIBCLANG_PATH");
     if env_opt("LIBCLANG_PATH").is_some() {

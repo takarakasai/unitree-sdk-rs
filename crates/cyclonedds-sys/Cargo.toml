@@ -12,5 +12,13 @@ links = "ddsc"
 [dependencies]
 
 [build-dependencies]
-bindgen = "0.70"
+# bindgen (and its libclang dependency) is only pulled in when regenerating the
+# FFI bindings. Normal builds use the committed `bindings/<arch>.rs`, so they
+# need only a C compiler (gcc/g++ is fine) — no clang/libclang.
+bindgen = { version = "0.70", optional = true }
 cc = "1"
+
+[features]
+# Maintainer-only: regenerate the Cyclone DDS FFI bindings at build time with
+# bindgen (requires libclang). Off by default; see tools/regen-bindings.sh.
+buildtime-bindgen = ["dep:bindgen"]
