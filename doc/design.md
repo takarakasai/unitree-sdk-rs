@@ -285,7 +285,69 @@ bindgen = "0.69"
 
 実装難易度から、最初は **`idlc` 経由で `*_desc.c` を生成 → C 側で扱う**方式を選ぶ。`idlc` は libddsc 同梱バイナリで、`.idl` を入力にする (= `.msg` → `.idl` 変換ステップが必要、これは 30 行程度で書ける)。
 
+> **【2026-05-30 実装時調査による更新】**
+>
+> M2/M3 着手時に sdk2 同梱 `libddsc.so` (Cyclone DDS **0.10.2**) の export シンボルと
+> 0.10.2 ソースを実測したところ、上記前提に **誤り** が見つかった:
+>
+> 1. **`idlc` は libddsc 同梱バイナリではない。** sdk2 配布物に `idlc` は無く、自前ビルドが必要。
+>    幸い 0.10.2 ソースは生成済み `parser.c`/`scanner.c` を同梱しており、bison/flex 無しで
+>    `cmake --target idlc` がビルドできた。
+> 2. **`idlc` は実行時には不要。** ロボット/実行環境に要るのは `libddsc.so` だけで、`idlc` は
+>    `.msg` 変更時に descriptor を再生成するメンテナ専用ツール。素の Ubuntu/RasPi OS の apt には
+>    Cyclone DDS が無く (ROS リポジトリ経由のみ・バージョン不一致リスク)、各実行環境に idlc を
+>    入れる前提は破綻する。**生成済み `*_desc.c` をリポジトリにコミットし、各環境は `cc` だけで
+>    ビルドする** 方針に変更 (§4.5 の「生成物コミット + CI diff チェック」を descriptor にも適用)。
+> 3. **「Generic topic で動的生成」は C API 単独では不可。** descriptor から sertype を作る
+>    `ddsi_sertype_default_init` は `.so` に **export されていない**。`dds_create_topic`
+>    (descriptor 版・public) で topic を作ると内部で sertype が生成されるが、それを **外部から
+>    取り戻す公開 API (`dds_get_entity_sertype` 等) も存在しない**。sertype を入手するには
+>    `dds_topic_pin` (export 済み) で handle→内部 `dds_topic*` を引き、内部ヘッダ
+>    `dds__types.h` の `struct dds_topic { … struct ddsi_sertype *m_stype; }` を読むしかなく、
+>    **内部ヘッダ + 構造体レイアウト依存** になる。
+>
+> この事実は §5.3 の backend trait シグネチャ選択に直結する (下記)。
+
 ### 5.3 抽象化 trait
+
+> **【2026-05-30 実装時調査による更新 — データ経路の再検討】**
+>
+> 下記の元設計は backend 境界を **シリアライズ済み `&[u8]`** (`write_serialized` /
+> `take_serialized`) としている。これには `dds_writecdr`/`dds_takecdr` + `ddsi_serdata_*`
+> を使うが、serdata 構築には `ddsi_sertype*` が必須で、§5.2 の調査どおり sertype 入手は
+> **内部ヘッダ + 構造体レイアウト依存** になる (= 経路 A)。
+>
+> 一方、公開 API のみで完結する経路 B (idlc 生成の **C 構造体** に Rust から値を詰めて
+> `dds_write`、受信は `dds_take` で C 構造体を受けて Rust 型へ変換) は、M2 の echo テストで
+> **動作実証済み**。内部構造体に一切触れない。
+>
+> | 観点 | 経路A: serialized (&[u8]) | 経路B: C構造体 (*T) |
+> |---|---|---|
+> | 必要 API | 内部ヘッダ + `m_stype` レイアウト依存 | 公開 API のみ |
+> | 動作実証 | 未 (要 PoC) | ✅ echo で実証済み |
+> | M1 自前 XCDR2 | backend で直接活用 | ワイヤ検証テスト用に降格 |
+> | バージョン脆弱性 | 高 (内部構造体) | 低 |
+> | Phase 2 (rustdds) 移行 | 境界が綺麗 | 型変換層を挟む |
+>
+> **採用方針: 経路 B (C 構造体)。** 内部ヘッダ依存を避け公開 API のみで v0.1 を成立させることを
+> 優先する (R5/R5b のバージョン脆弱性も下げる)。backend trait は下記の `write_serialized`/
+> `take_serialized` ではなく、型ごとの **C 構造体ミラー (`#[repr(C)]`) を介した typed I/O** に
+> 変更する。具体的には:
+>
+> - `unitree-msgs` は各型に「Rust 型 ⇄ idlc 生成 C 構造体」変換 (`to_c`/`from_c`) を生成し、
+>   `#[repr(C)]` ミラー構造体と topic descriptor (`extern` シンボル) を持つ。
+> - `CycloneBackend` は `dds_create_topic(desc)` / `dds_write(*c_struct)` / `dds_take` を呼ぶ
+>   typed バックエンド。trait は `write::<T>(handle, &T)` / `take::<T>(handle) -> Option<T>`
+>   相当のジェネリックにする (関連メソッドを型パラメタ化、または `DdsCType` trait で抽象化)。
+> - M1 の自前 XCDR2 (`cdr.rs`) は破棄せず、**C 構造体ミラーと wire 一致を突き合わせる検証テスト**
+>   および将来の rustdds backend 用に残す。
+> - String/sequence/可変長を含む型 (HeightMap 等) は C 構造体側でポインタ管理が要るので、
+>   `dds_alloc`/`dds_sample_free` (echo.h 参照) を使うか、Go2 low-level で実際に使う固定長中心の
+>   型 (LowCmd/LowState 等) を優先する。
+>
+> 以降の元設計テキストは「serialized 境界」を前提に書かれているが、上記方針では typed 境界へ
+> 読み替えること。`Participant`/`Topic<T>`/`Writer<T>`/`Reader<T>` の **公開 API は変更なし**
+> (`Writer::write(&T)` / `Reader::poll() -> Option<T>` のまま) で、変わるのは backend 内部のみ。
 
 DDS バックエンドを差し替え可能にする中心が **`DdsBackend` trait**。`Participant<B>` のような型パラメタを表に出さず、cargo feature で 1 個に固定する設計にする (アプリ側を簡潔に保つ):
 
