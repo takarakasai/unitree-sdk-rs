@@ -8,11 +8,14 @@
 //! `csrc/rpc.{idl,c,h}` are committed (regenerate with idlc only if the RPC IDL
 //! changes), so a normal build needs just a C compiler — never idlc:
 //!
-//!   idlc -l c csrc/rpc.idl   # -> csrc/rpc.c, csrc/rpc.h
+//!   idlc -l c csrc/rpc.idl       # -> csrc/rpc.c, csrc/rpc.h
+//!   idlc -l c csrc/std_msgs.idl  # -> csrc/std_msgs.c, csrc/std_msgs.h
 //!
 //! The `Request_` / `Response_` descriptors are variable-length (they carry a
 //! `string` and a `sequence<octet>`), which is exactly why they live here and
 //! not in `unitree-dds`: that crate's POD-only data path cannot exchange them.
+//! `std_msgs::msg::dds_::String_` (the `rt/utlidar/switch` payload) is the same
+//! story — a bare variable-length `string`.
 
 use std::path::PathBuf;
 
@@ -23,14 +26,17 @@ fn main() {
         .expect("DEP_DDSC_INCLUDE_DIR not set by cyclonedds-sys");
 
     let c_file = csrc.join("rpc.c");
-    println!("cargo:rerun-if-changed={}", c_file.display());
-    println!("cargo:rerun-if-changed={}", csrc.join("rpc.h").display());
+    let std_msgs_c = csrc.join("std_msgs.c");
+    for f in [&c_file, &std_msgs_c, &csrc.join("rpc.h"), &csrc.join("std_msgs.h")] {
+        println!("cargo:rerun-if-changed={}", f.display());
+    }
 
     cc::Build::new()
         .include(&csrc)
         .include(&include_dir)
         .warnings(false)
         .file(&c_file)
+        .file(&std_msgs_c)
         .compile("unitree_rpc_descriptors");
 }
 

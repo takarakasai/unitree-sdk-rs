@@ -188,6 +188,17 @@ struct CResponse {
 extern "C" {
     static unitree_api_msg_dds__Request__desc: dds::dds_topic_descriptor_t;
     static unitree_api_msg_dds__Response__desc: dds::dds_topic_descriptor_t;
+    /// `std_msgs::msg::dds_::String_` — a bare variable-length `string`, used by
+    /// fire-and-forget topics like `rt/utlidar/switch`.
+    static std_msgs_msg_dds__String__desc: dds::dds_topic_descriptor_t;
+}
+
+/// FFI mirror of `std_msgs_msg_dds__String_` (csrc/std_msgs.h): a single
+/// NUL-terminated C string. A pointer to this is a valid sample pointer for
+/// `dds_write` with `std_msgs_msg_dds__String__desc`.
+#[repr(C)]
+struct CStdString {
+    data: *mut c_char,
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +473,138 @@ impl MotionSwitcher {
     /// Hand control back to the onboard controller by selecting `"normal"`.
     pub fn restore(&self) -> Result<()> {
         self.select_mode("normal")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// std_msgs/String topic publisher (fire-and-forget topics, e.g. LiDAR switch)
+// ---------------------------------------------------------------------------
+
+/// One-shot publisher for `std_msgs::msg::dds_::String_` on a single topic.
+///
+/// Unlike [`RpcClient`] there is no reply: we publish a string and block until
+/// it is acknowledged. Owns its own DDS participant; drop it when done.
+pub struct StringPublisher {
+    participant: dds::dds_entity_t,
+    writer: dds::dds_entity_t,
+}
+
+impl StringPublisher {
+    /// Create a publisher on `topic` over network interface `iface`.
+    pub fn new(topic: &str, iface: &str) -> Result<Self> {
+        let xml = format!(
+            "<CycloneDDS><Domain><General><Interfaces>\
+             <NetworkInterface name=\"{iface}\" priority=\"default\" multicast=\"default\"/>\
+             </Interfaces></General></Domain></CycloneDDS>"
+        );
+        std::env::set_var("CYCLONEDDS_URI", xml);
+
+        let participant = unsafe { dds::dds_create_participant(0, ptr::null(), ptr::null()) };
+        check(participant, "dds_create_participant")?;
+
+        let cname = CString::new(topic).map_err(|_| RpcError::NulString)?;
+        let topic_ent = unsafe {
+            dds::dds_create_topic(
+                participant,
+                &std_msgs_msg_dds__String__desc,
+                cname.as_ptr(),
+                ptr::null(),
+                ptr::null(),
+            )
+        };
+        check(topic_ent, "dds_create_topic")?;
+
+        // Reliable + keep-last + volatile, matching the rest of this crate.
+        let wq = build_qos(8);
+        let writer = unsafe { dds::dds_create_writer(participant, topic_ent, wq, ptr::null()) };
+        unsafe { dds::dds_delete_qos(wq) };
+        check(writer, "dds_create_writer")?;
+
+        Ok(Self {
+            participant,
+            writer,
+        })
+    }
+
+    /// Publish `text` once. First wait up to `timeout` for a subscriber to
+    /// match (so the reliable sample isn't dropped for want of a reader), then
+    /// block up to `timeout` for the sample to be acknowledged. Returns whether
+    /// a subscriber was matched — `false` means the sample was still written but
+    /// nothing was listening (likely the wrong topic name, or the driver down).
+    pub fn publish(&self, text: &str, timeout: Duration) -> Result<bool> {
+        let matched = self.wait_for_subscriber(timeout)?;
+
+        let cstr = CString::new(text).map_err(|_| RpcError::NulString)?;
+        let mut sample = CStdString {
+            data: cstr.as_ptr() as *mut c_char,
+        };
+        let rc = unsafe {
+            dds::dds_write(self.writer, (&mut sample as *mut CStdString).cast::<c_void>())
+        };
+        check(rc, "dds_write")?;
+
+        // Reliable QoS: block until acknowledged so the sample isn't lost when
+        // the participant is torn down immediately after this call returns.
+        let nanos = timeout.as_nanos().min(i64::MAX as u128) as i64;
+        unsafe { dds::dds_wait_for_acks(self.writer, nanos) };
+        Ok(matched)
+    }
+
+    /// Poll PUBLICATION_MATCHED until a subscriber appears or `timeout` elapses.
+    fn wait_for_subscriber(&self, timeout: Duration) -> Result<bool> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let mut st: dds::dds_publication_matched_status_t = unsafe { std::mem::zeroed() };
+            check(
+                unsafe { dds::dds_get_publication_matched_status(self.writer, &mut st) },
+                "dds_get_publication_matched_status",
+            )?;
+            if st.current_count > 0 {
+                return Ok(true);
+            }
+            if Instant::now() >= deadline {
+                return Ok(false);
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+}
+
+impl Drop for StringPublisher {
+    fn drop(&mut self) {
+        unsafe {
+            dds::dds_delete(self.participant);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Go2 utlidar (L1 LiDAR) switch
+// ---------------------------------------------------------------------------
+
+/// The Go2 L1 LiDAR's spinning motor is toggled by publishing `"ON"` / `"OFF"`
+/// to `rt/utlidar/switch` (a `std_msgs/String`). Turning it off stops the
+/// audible motor and the point-cloud stream; turning it on restarts both.
+pub struct UtLidar(StringPublisher);
+
+impl UtLidar {
+    /// Topic the Go2 LiDAR driver listens on for on/off commands.
+    pub const SWITCH_TOPIC: &'static str = "rt/utlidar/switch";
+
+    /// Connect over network interface `iface` (e.g. `"eth0"`).
+    pub fn new(iface: &str) -> Result<Self> {
+        Ok(Self(StringPublisher::new(Self::SWITCH_TOPIC, iface)?))
+    }
+
+    /// Stop the LiDAR motor (and point-cloud stream). Returns whether the LiDAR
+    /// driver's subscriber was matched.
+    pub fn off(&self) -> Result<bool> {
+        self.0.publish("OFF", Duration::from_secs(3))
+    }
+
+    /// Restart the LiDAR motor. Returns whether the subscriber was matched.
+    pub fn on(&self) -> Result<bool> {
+        self.0.publish("ON", Duration::from_secs(3))
     }
 }
 
