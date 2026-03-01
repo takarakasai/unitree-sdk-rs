@@ -1,0 +1,22 @@
+[package]
+name = "unitree-dds"
+description = "Safe DDS pub/sub layer for Unitree robots, built on cyclonedds-sys"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+cyclonedds-sys = { path = "../cyclonedds-sys", version = "0.1.0", optional = true }
+unitree-msgs = { path = "../unitree-msgs", version = "0.1.0" }
+thiserror.workspace = true
+tracing.workspace = true
+bytes.workspace = true
+
+[features]
+default = ["backend-cyclonedds"]
+# DDS backend over the vendored Cyclone DDS (libddsc). The v0.1 backend.
+backend-cyclonedds = ["dep:cyclonedds-sys"]
+# Placeholder for the Phase 2 pure-Rust backend (rustdds). Stub only for now.
+backend-rustdds = []

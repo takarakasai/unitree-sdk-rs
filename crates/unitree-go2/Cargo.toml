@@ -1,0 +1,14 @@
+[package]
+name = "unitree-go2"
+description = "High-level API for the Unitree Go2 robot (sport / state helpers)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+unitree-dds = { path = "../unitree-dds", version = "0.1.0" }
+unitree-msgs = { path = "../unitree-msgs", version = "0.1.0" }
+thiserror.workspace = true
+tracing.workspace = true
