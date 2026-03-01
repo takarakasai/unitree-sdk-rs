@@ -74,6 +74,26 @@ fn main() {
     // rpath so `cargo test`/examples load libddsc without LD_LIBRARY_PATH.
     println!("cargo:rustc-link-arg=-Wl,-rpath,{}", out_dir.display());
 
+    // --- compile the committed topic descriptor(s) used by tests ---
+    //
+    // The C descriptor in `csrc/` is generated from `echo.idl` with idlc and
+    // committed so that builds need only a C compiler, not idlc. We compile it
+    // into a small static lib that the echo integration test links against.
+    // (Descriptor handling proper lives in the unitree-dds backend; this is a
+    // minimal hook to exercise the FFI end to end.)
+    let csrc = manifest_dir.join("csrc");
+    let echo_c = csrc.join("echo.c");
+    if echo_c.exists() {
+        println!("cargo:rerun-if-changed={}", echo_c.display());
+        println!("cargo:rerun-if-changed={}", csrc.join("echo.h").display());
+        cc::Build::new()
+            .file(&echo_c)
+            .include(&csrc)
+            .include(&include_dir)
+            .warnings(false)
+            .compile("cyclonedds_test_descriptors");
+    }
+
     // Re-export the resolved lib dir for dependent crates / debugging.
     println!("cargo:lib_dir={}", lib_dir.display());
     println!("cargo:include_dir={}", include_dir.display());

@@ -1,0 +1,11 @@
+// Minimal type used only by the same-process Pub/Sub echo test (tests/echo.rs).
+// The C topic descriptor is generated from this with idlc (Cyclone DDS 0.10.2):
+//   idlc -l c echo.idl
+// and the resulting echo.c / echo.h are committed alongside so that downstream
+// builds need only a C compiler (cc), not idlc itself.
+module cyclonedds_sys { module test {
+  struct Echo {
+    string content;
+    long seq;
+  };
+}; };
