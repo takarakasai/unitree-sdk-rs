@@ -23,12 +23,13 @@
 //! # }
 //! ```
 
-pub use unitree_dds::{
-    DdsError, Participant, Reader, ReaderQos, Result, Topic, Writer, WriterQos,
-};
+pub use unitree_dds::{DdsError, Participant, Reader, ReaderQos, Result, Topic, Writer, WriterQos};
 pub use unitree_msgs::unitree_go::{
     BmsCmd, BmsState, IMUState, LowCmd, LowState, MotorCmd, MotorState, WirelessController,
 };
+
+pub mod lowcmd;
+pub use lowcmd::{crc32_core, init_lowcmd, set_crc};
 
 /// DDS topic names used by the Go2 (domain 0).
 pub mod topics {

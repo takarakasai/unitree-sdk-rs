@@ -6,6 +6,6 @@ float32 tau_est
 float32 q_raw
 float32 dq_raw
 float32 ddq_raw
-int8 temperature
+uint8 temperature
 uint32 lost
 uint32[2] reserve

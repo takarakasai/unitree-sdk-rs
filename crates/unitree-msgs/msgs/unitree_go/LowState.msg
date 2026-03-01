@@ -13,8 +13,8 @@ uint32 tick
 uint8[40] wireless_remote
 uint8 bit_flag
 float32 adc_reel
-int8 temperature_ntc1
-int8 temperature_ntc2
+uint8 temperature_ntc1
+uint8 temperature_ntc2
 float32 power_v
 float32 power_a
 uint16[4] fan_frequency
