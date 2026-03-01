@@ -17,11 +17,12 @@
 //!
 //! Usage:
 //! ```text
-//! cargo run -p unitree-go2 --example go2_stand -- <iface> <up|down|hold> [secs] [kp] [kd]
+//! cargo run -p unitree-go2 --example go2_stand -- <iface> <up|down|hold> [secs] [kp] [kd] [hold_secs]
 //! # incremental bring-up (robot lying, sport_mode already OFF):
 //! cargo run -p unitree-go2 --example go2_stand -- eth0 hold 3 0  2   # pure damping, ~no motion
 //! cargo run -p unitree-go2 --example go2_stand -- eth0 hold 3 10 3   # gentle hold, tiny motion
-//! cargo run -p unitree-go2 --example go2_stand -- eth0 up   1.5      # full stand-up
+//! cargo run -p unitree-go2 --example go2_stand -- eth0 down 2.5      # stand -> folded (safe exit)
+//! cargo run -p unitree-go2 --example go2_stand -- eth0 up   1.5 60 5 20  # stand, then hold 20 s
 //! ```
 //!
 //! # ⚠️ Safety
@@ -32,6 +33,12 @@
 //! `go2_motion_ctrl release <iface>`. While a low-level program is running the
 //! remote controller's high-level buttons do NOT work; the emergency action is
 //! Ctrl-C plus physically supporting the robot. Keep clear space around it.
+//!
+//! `down` ends in a folded pose on the ground, so it is safe to let it exit.
+//! `up` ends **standing**: when this program exits the motors lose their command
+//! and the robot sags. Give `up` a long `hold_secs` and re-activate sport_mode
+//! (`go2_motion_ctrl restore <iface>`) during that hold so the onboard controller
+//! takes over the stand before you stop this program.
 
 use std::time::{Duration, Instant};
 
@@ -83,6 +90,13 @@ fn main() {
     let secs: f32 = args.next().and_then(|s| s.parse().ok()).unwrap_or(1.5);
     let kp_arg: Option<f32> = args.next().and_then(|s| s.parse().ok());
     let kd_arg: Option<f32> = args.next().and_then(|s| s.parse().ok());
+    // How long to keep streaming the target pose after the ramp. Defaults to
+    // HOLD; pass a large value for `up` so the robot stays actively held while
+    // sport_mode is re-activated, then stop streaming (safe low->high handoff).
+    let hold_secs: f32 = args
+        .next()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or_else(|| HOLD.as_secs_f32());
 
     let (iface, mode) = match (iface, mode.as_deref()) {
         (Some(i), Some("up")) => (i, Mode::Up),
@@ -90,11 +104,14 @@ fn main() {
         (Some(i), Some("hold")) => (i, Mode::Hold),
         _ => {
             eprintln!(
-                "usage: go2_stand <iface> <up|down|hold> [secs] [kp] [kd]\n\
+                "usage: go2_stand <iface> <up|down|hold> [secs] [kp] [kd] [hold_secs]\n\
                  e.g.   go2_stand eth0 hold 3 0 2   # confirm command path, ~no motion\n\
-                 e.g.   go2_stand eth0 up   1.5     # full stand-up\n\n\
+                 e.g.   go2_stand eth0 up   1.5     # full stand-up (holds 2 s then exits)\n\
+                 e.g.   go2_stand eth0 up   1.5 60 5 20  # stand, hold 20 s for sport handoff\n\n\
                  SAFETY: deactivate sport_mode first (go2_motion_ctrl release <iface>);\n\
-                 keep space around the robot; Ctrl-C + support it to abort."
+                 keep space around the robot; Ctrl-C + support it to abort.\n\
+                 For `up`, hold long enough to re-activate sport_mode before exit,\n\
+                 otherwise the robot loses its command and sags when this exits."
             );
             std::process::exit(2);
         }
@@ -109,16 +126,25 @@ fn main() {
         Mode::Down => "LIE DOWN (stand -> lie)",
         Mode::Hold => "HOLD current pose",
     };
-    eprintln!("go2_stand: {what}  secs={secs:.2} kp={kp} kd={kd} iface={iface}");
+    eprintln!(
+        "go2_stand: {what}  secs={secs:.2} kp={kp} kd={kd} hold={hold_secs:.1}s iface={iface}"
+    );
     eprintln!("           ensure sport_mode is OFF and the area is clear ...");
 
-    if let Err(e) = run(&iface, mode, secs, kp, kd) {
+    if let Err(e) = run(&iface, mode, secs, kp, kd, hold_secs) {
         eprintln!("error: {e}");
         std::process::exit(1);
     }
 }
 
-fn run(iface: &str, mode: Mode, secs: f32, kp: f32, kd: f32) -> unitree_go2::Result<()> {
+fn run(
+    iface: &str,
+    mode: Mode,
+    secs: f32,
+    kp: f32,
+    kd: f32,
+    hold_secs: f32,
+) -> unitree_go2::Result<()> {
     let dp = Participant::new(0, Some(iface))?;
 
     let cmd_topic = dp.create_topic::<unitree_go2::LowCmd>(topics::LOW_CMD)?;
@@ -144,7 +170,7 @@ fn run(iface: &str, mode: Mode, secs: f32, kp: f32, kd: f32) -> unitree_go2::Res
 
     let mut cmd = init_lowcmd();
     let total_ticks = ((secs / CONTROL_DT.as_secs_f32()).round() as u64).max(1);
-    let hold_ticks = (HOLD.as_secs_f32() / CONTROL_DT.as_secs_f32()).round() as u64;
+    let hold_ticks = (hold_secs / CONTROL_DT.as_secs_f32()).round() as u64;
 
     // 2. Fixed-rate loop: ramp start -> target, then hold target.
     let loop_start = Instant::now();
@@ -169,7 +195,7 @@ fn run(iface: &str, mode: Mode, secs: f32, kp: f32, kd: f32) -> unitree_go2::Res
         }
     }
 
-    eprintln!("done: reached target and held {:.1}s", HOLD.as_secs_f32());
+    eprintln!("done: reached target and held {hold_secs:.1}s");
     Ok(())
 }
 
