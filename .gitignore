@@ -4,4 +4,3 @@ Cargo.lock
 *.swp
 *.swo
 .DS_Store
-/vendor/cyclonedds/lib/**/*.so
