@@ -31,6 +31,9 @@ pub use unitree_msgs::unitree_go::{
 pub mod lowcmd;
 pub use lowcmd::{crc32_core, init_lowcmd, set_crc};
 
+pub mod utlidar;
+pub use utlidar::{UtlidarError, UtlidarSwitch};
+
 /// DDS topic names used by the Go2 (domain 0).
 pub mod topics {
     /// Low-level command topic (`LowCmd`).

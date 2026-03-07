@@ -10,5 +10,12 @@ rust-version.workspace = true
 [dependencies]
 unitree-dds = { path = "../unitree-dds", version = "0.1.0" }
 unitree-msgs = { path = "../unitree-msgs", version = "0.1.0" }
+# Used directly by the `utlidar` module: `rt/utlidar/switch` carries a
+# `std_msgs/String` (variable-length), which the POD-only `unitree-dds` path
+# cannot exchange, so we marshal it over cyclonedds-sys like `unitree-rpc`.
+cyclonedds-sys = { path = "../cyclonedds-sys", version = "0.1.0" }
 thiserror.workspace = true
 tracing.workspace = true
+
+[build-dependencies]
+cc = "1"

@@ -46,7 +46,7 @@ const PRIMITIVES: &[&str] = &[
 ];
 
 fn main() {
-    let pkgs = ["unitree_api", "unitree_go", "unitree_hg"];
+    let pkgs = ["unitree_api", "unitree_go", "unitree_hg", "std_msgs"];
     let manifest_dir = PathBuf::from(env_var("CARGO_MANIFEST_DIR"));
     let msgs_dir = manifest_dir.join("msgs");
     let out_dir = PathBuf::from(env_var("OUT_DIR"));
@@ -85,7 +85,9 @@ fn main() {
     for pkg in pkgs {
         writeln!(out, "pub mod {pkg} {{").unwrap();
         out.push_str(
-            "    #![allow(clippy::all)]\n\
+            // `unused_imports`: a package with no POD types (e.g. std_msgs,
+            // whose only type carries a `string`) never references `DdsPod`.
+            "    #![allow(clippy::all, unused_imports)]\n\
              \x20   use crate::cdr::{CdrDeserialize, CdrDeserializer, CdrError, CdrSerialize, CdrSerializer};\n\
              \x20   use crate::{DdsType, DdsPod};\n\n",
         );
@@ -176,7 +178,9 @@ fn map_type(t: &str) -> String {
         "uint64" => "u64",
         "float32" => "f32",
         "float64" => "f64",
-        "string" => "String",
+        // Fully qualified so it never collides with a generated message named
+        // `String` (e.g. `std_msgs/String`, whose own field is `string data`).
+        "string" => "::std::string::String",
         other => other,
     }
     .to_string()
@@ -209,7 +213,7 @@ fn field_is_pod(pkg: &str, f: &Field, pod: &BTreeSet<String>) -> bool {
     match f.kind {
         FieldKind::Sequence => false,
         FieldKind::Scalar | FieldKind::FixedArray(_) => {
-            if f.elem == "String" {
+            if f.elem == "::std::string::String" {
                 false
             } else if PRIMITIVES.contains(&f.elem.as_str()) {
                 true
